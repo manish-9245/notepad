@@ -1,0 +1,14 @@
+public class ArtemisConnectionFactory implements jakarta.jms.ConnectionFactory {
+
+  private final ActiveMQConnectionFactory factory;
+
+  public ArtemisConnectionFactory(String brokerUrl, String username, String password) {
+    this.factory = new ActiveMQConnectionFactory(brokerUrl, username, password);
+  }
+
+  @Override
+  public jakarta.jms.Connection createConnection() throws JMSException {
+    return factory.createConnection();
+  }
+
+}
