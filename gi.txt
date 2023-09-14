@@ -1,8 +1,10 @@
-import org.apache.activemq.artemis.jms.client.ActiveMQJMSClient;
-import javax.jms.TopicConnectionFactory;
+SSLContext sslContext = sslContextBuilder.build();
 
-public TopicConnectionFactory getTopicConnectionFactory() throws JMSException {
-    TransportConfiguration transportConfiguration = new TransportConfiguration(NettyConnectorFactory.class.getName());
-    TopicConnectionFactory connectionFactory = ActiveMQJMSClient.createConnectionFactoryWithoutHA(JMSFactoryType.CF, transportConfiguration);
-    return connectionFactory;
-}
+    KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509", "SunJSSE");
+    keyManagerFactory.init(clientStore, "".toCharArray());
+    sslContext.init(keyManagerFactory.getKeyManagers(), null, new java.security.SecureRandom());
+
+    SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(sslContext);
+
+    HttpClientConnectionManager connectionManager = PoolingHttpClientConnectionManagerBuilder.create().setSSLSocketFactory(socketFactory).build();
+    CloseableHttpClient httpClient = HttpClients.custom().setConnectionManager(connectionManager).build();
