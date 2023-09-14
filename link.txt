@@ -1,0 +1,1 @@
+https://stackoverflow.com/questions/74688513/httpclients-custom-setsslsocketfactory-method-not-found
