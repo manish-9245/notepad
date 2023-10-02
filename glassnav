@@ -1,19 +1,22 @@
 import React from 'react';
-import './GlassNavbar.css'; // Import the CSS file
+import './Navbar.css'; // Import the CSS file
 
-const GlassNavbar = () => {
+const Navbar = () => {
   return (
-    <nav className="glass-navbar">
-      <div className="navbar-content">
-        <h1>My Glass Navbar</h1>
-        <ul className="nav-links">
-          <li><a href="/">Home</a></li>
-          <li><a href="/about">About</a></li>
-          <li><a href="/contact">Contact</a></li>
-        </ul>
+    <nav className="navbar">
+      <div className="container">
+        <div className="navbar-content">
+          <span className="logo">Logo</span>
+          <div className="nav-links">
+            <a href="#">Dashboard</a>
+            <a href="#">About</a>
+            <a href="#">Projects</a>
+            <a href="#">Contact</a>
+          </div>
+        </div>
       </div>
     </nav>
   );
 };
 
-export default GlassNavbar;
+export default Navbar;
