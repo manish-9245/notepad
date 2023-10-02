@@ -1,42 +1,44 @@
-.glass-navbar {
-  background: rgba(255, 255, 255, 0.2); /* Adjust opacity as needed */
-  backdrop-filter: blur(10px); /* Adjust blur value as needed */
-  -webkit-backdrop-filter: blur(10px); /* Safari support */
-  position: fixed;
+/* Navbar */
+.navbar {
+  position: sticky;
   top: 0;
-  left: 0;
-  width: 100%;
-  padding: 1rem 0;
-  z-index: 100;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.3); /* Adjust opacity as needed */
+  backdrop-filter: blur(16px); /* Adjust blur value as needed */
+}
+
+.container {
+  max-width: 5xl;
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
 .navbar-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1rem;
+  justify-content: space-between;
+  height: 4rem;
+}
+
+.logo {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #333; /* Text color */
+  text-decoration: none;
 }
 
 .nav-links {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   display: flex;
-  gap: 20px;
-}
-
-.nav-links li {
-  font-size: 18px;
+  gap: 1rem;
 }
 
 .nav-links a {
   text-decoration: none;
-  color: #333;
-  transition: color 0.3s ease-in-out;
+  font-weight: bold;
+  color: #333; /* Text color */
 }
 
+/* Hover effect for links */
 .nav-links a:hover {
-  color: #007bff;
+  color: #007bff; /* Hover color */
 }
