@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
@@ -11,14 +11,16 @@ function CustomSearchBarGrid() {
     setGridApi(params.api);
   };
 
-  const handleSearch = () => {
-    const filterInstance = gridApi.getFilterInstance('name'); // Replace 'name' with the field you want to filter
-    filterInstance.setModel({
-      type: 'contains',
-      filter: searchText,
-    });
-    gridApi.onFilterChanged();
-  };
+  useEffect(() => {
+    if (gridApi) {
+      const filterInstance = gridApi.getFilterInstance('name'); // Replace 'name' with the field you want to filter
+      filterInstance.setModel({
+        type: 'contains',
+        filter: searchText,
+      });
+      gridApi.onFilterChanged();
+    }
+  }, [searchText, gridApi]);
 
   return (
     <div>
@@ -27,7 +29,6 @@ function CustomSearchBarGrid() {
         value={searchText}
         onChange={(e) => setSearchText(e.target.value)}
       />
-      <button onClick={handleSearch}>Search</button>
       <div
         className="ag-theme-alpine"
         style={{
