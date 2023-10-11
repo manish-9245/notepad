@@ -1,0 +1,19 @@
+const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (event) => {
+    const searchQuery = event.target.value;
+
+    // Get the Ag Grid API.
+    const api = event.api;
+
+    // Filter the rows in the grid.
+    api.setFilterModel({
+      caseId: {
+        filterType: "contains",
+        filter: searchQuery,
+      },
+    });
+
+    // Highlight the row that contains the Case ID.
+    api.setFocusedCell(0, 0);
+  };
