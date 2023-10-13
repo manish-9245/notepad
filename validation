@@ -1,0 +1,21 @@
+import Papa from "papaparse";
+
+const validateCSVFile = (csvFile) => {
+  // Read the CSV file and parse it into an array of objects.
+  const csvData = Papa.parse(csvFile).data;
+
+  // Validate that the CSV file only has one column.
+  if (csvData[0].length !== 1) {
+    return "The CSV file must only have one column.";
+  }
+
+  // Validate that each Case ID is a minimum of 15 and maximum of 18 letter string.
+  const caseIds = csvData.map((row) => row[0]);
+  const invalidCaseIds = caseIds.filter((caseId) => caseId.length < 15 || caseId.length > 18);
+  if (invalidCaseIds.length > 0) {
+    return `The following Case IDs are invalid: ${invalidCaseIds.join(", ")}`;
+  }
+
+  // Return true if the CSV file is valid.
+  return true;
+};
