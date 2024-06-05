@@ -1,12 +1,17 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
 from datetime import datetime
+from fuzzywuzzy import process
+
+def find_closest_column(target, columns, threshold=80):
+    closest_match, score = process.extractOne(target, columns)
+    return closest_match if score >= threshold else None
 
 # Load the data
 input_file = 'input_2023-06-05.csv'  # Replace with your actual file name
@@ -15,6 +20,19 @@ output_file = 'output_2023-06-05.csv'  # Replace with your actual file name
 input_df = pd.read_csv(input_file, index_col=0)
 output_df = pd.read_csv(output_file, index_col=0)
 
+# Handle typos in column names
+output_mapping = {
+    'principal_amt': find_closest_column('principal_amt', output_df.columns),
+    'full_commission': find_closest_column('full_commission', output_df.columns),
+    'indicator_long': find_closest_column('indicator_long', output_df.columns)
+}
+
+output_df.columns = [output_mapping.get(col, col) for col in output_mapping]
+
+# Map 'SS' to 'Short Sell' in the input DataFrame
+indicator_col = find_closest_column('indicator', input_df.columns)
+input_df[indicator_col] = input_df[indicator_col].replace('SS', 'Short Sell')
+
 # Extract column names directly from the DataFrames
 input_cols = input_df.columns
 output_cols = output_df.columns
@@ -22,48 +40,43 @@ output_cols = output_df.columns
 print("Input columns:", input_cols)
 print("Output columns:", output_cols)
 
-# Identify numerical and categorical columns
-numerical_cols = input_df.select_dtypes(include=[np.number]).columns
-categorical_cols = input_df.select_dtypes(include=[object]).columns
+# Identify commission type column
+comm_type_col = find_closest_column('commission_type', input_df.columns)
 
-# Determine numerical and categorical output columns
-output_numerical_cols = output_df.select_dtypes(include=[np.number]).columns
-output_categorical_cols = output_df.select_dtypes(include=[object]).columns
+# Split columns into different types
+numerical_cols = [col for col in input_df.columns if col not in [indicator_col, comm_type_col] and input_df[col].dtype in ['int64', 'float64']]
+categorical_cols = [col for col in input_df.columns if col not in numerical_cols]
 
-print("Numerical output columns:", output_numerical_cols)
-print("Categorical output columns:", output_categorical_cols)
+print("Numerical columns:", numerical_cols)
+print("Categorical columns:", categorical_cols)
 
-# Initialize label encoders for each categorical column
+# Initialize label encoders and one-hot encoders
 label_encoders = {}
-for col in categorical_cols:
-    label_encoders[col] = LabelEncoder()
-    input_df[col] = label_encoders[col].fit_transform(input_df[col])
+onehot_encoder = OneHotEncoder(handle_unknown='ignore')
 
-# Initialize label encoders for output categorical columns
-output_label_encoders = {}
-for col in output_categorical_cols:
-    output_label_encoders[col] = LabelEncoder()
-    output_df[col] = output_label_encoders[col].fit_transform(output_df[col])
+# Handle indicator column with LabelEncoder
+unique_values = pd.unique(pd.concat([input_df[indicator_col], output_df[output_mapping['indicator_long']]]))
+label_encoders[indicator_col] = LabelEncoder()
+label_encoders[indicator_col].fit(unique_values)
+input_df[indicator_col] = label_encoders[indicator_col].transform(input_df[indicator_col])
+output_df[output_mapping['indicator_long']] = label_encoders[indicator_col].transform(output_df[output_mapping['indicator_long']])
+
+# Handle commission type with OneHotEncoder
+commission_types = input_df[comm_type_col].values.reshape(-1, 1)
+onehot_encoder.fit(commission_types)
 
 # Split the data into features (X) and targets (y)
-X = input_df
-y_numerical = output_df[output_numerical_cols]
-y_categorical = output_df[output_categorical_cols]
+X_num = input_df[numerical_cols]
+X_cat = onehot_encoder.transform(input_df[comm_type_col].values.reshape(-1, 1)).toarray()
+X = np.hstack([X_num, X_cat])
+
+y_numerical = output_df[[output_mapping['principal_amt'], output_mapping['full_commission']]]
+y_categorical = output_df[[output_mapping['indicator_long']]]
 
 # Split into training and testing sets
 X_train, X_test, y_train_num, y_test_num, y_train_cat, y_test_cat = train_test_split(
     X, y_numerical, y_categorical, test_size=0.2, random_state=42
 )
-
-# Create column transformers for numerical and categorical columns
-numeric_transformer = Pipeline(steps=[
-    ('scaler', StandardScaler())
-])
-
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', numeric_transformer, numerical_cols)
-    ])
 
 # Initialize models
 regressor = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -73,39 +86,24 @@ classifier = RandomForestClassifier(n_estimators=100, random_state=42)
 multi_regressor = MultiOutputRegressor(regressor)
 multi_classifier = MultiOutputClassifier(classifier)
 
-# Create pipelines
-reg_pipeline = Pipeline(steps=[
-    ('preprocessor', preprocessor),
-    ('regressor', multi_regressor)
-])
-
-clf_pipeline = Pipeline(steps=[
-    ('preprocessor', preprocessor),
-    ('classifier', multi_classifier)
-])
-
 # Train models
-reg_pipeline.fit(X_train, y_train_num)
-clf_pipeline.fit(X_train, y_train_cat)
+multi_regressor.fit(X_train, y_train_num)
+multi_classifier.fit(X_train, y_train_cat)
 
 # Make predictions on test set
-y_pred_num = reg_pipeline.predict(X_test)
-y_pred_cat = clf_pipeline.predict(X_test)
+y_pred_num = multi_regressor.predict(X_test)
+y_pred_cat = multi_classifier.predict(X_test)
 
 # Convert predicted categories back to original labels
 y_pred_cat_original = y_pred_cat.copy()
-for i, col in enumerate(output_categorical_cols):
-    y_pred_cat_original[:, i] = output_label_encoders[col].inverse_transform(y_pred_cat[:, i])
+y_pred_cat_original[:, 0] = label_encoders[indicator_col].inverse_transform(y_pred_cat[:, 0])
 
 # Create DataFrames for predicted values
-y_pred_num_df = pd.DataFrame(y_pred_num, columns=output_numerical_cols, index=y_test_num.index)
-y_pred_cat_df = pd.DataFrame(y_pred_cat_original, columns=output_categorical_cols, index=y_test_cat.index)
+y_pred_num_df = pd.DataFrame(y_pred_num, columns=y_numerical.columns, index=y_test_num.index)
+y_pred_cat_df = pd.DataFrame(y_pred_cat_original, columns=y_categorical.columns, index=y_test_cat.index)
 
 # Combine numerical and categorical predictions
 y_pred_df = pd.concat([y_pred_num_df, y_pred_cat_df], axis=1)
-
-# Save predictions to CSV
-y_pred_df.to_csv(f'predictions_{datetime.today().strftime("%Y-%m-%d")}.csv')
 
 # Function to make predictions for new entries
 def predict_new_entries(new_data):
@@ -113,39 +111,40 @@ def predict_new_entries(new_data):
     if isinstance(new_data, dict):
         new_data = pd.DataFrame.from_dict(new_data, orient='index')
     
-    # Ensure all columns are present and in the correct order
-    missing_cols = set(input_cols) - set(new_data.columns)
-    for col in missing_cols:
-        new_data[col] = 0  # or any appropriate default value
-
-    new_data = new_data[input_cols]
+    # Replace 'SS' with 'Short Sell' in new data
+    new_data[indicator_col] = new_data[indicator_col].replace('SS', 'Short Sell')
     
-    # Encode categorical columns
-    for col in categorical_cols:
-        new_data[col] = label_encoders[col].transform(new_data[col].astype(str))
+    # Prepare the data
+    new_data_num = new_data[numerical_cols].fillna(0)
+    new_data_cat = onehot_encoder.transform(new_data[comm_type_col].values.reshape(-1, 1)).toarray()
+    new_data_combined = np.hstack([new_data_num, new_data_cat])
     
     # Make predictions
-    new_pred_num = reg_pipeline.predict(new_data)
-    new_pred_cat = clf_pipeline.predict(new_data)
+    new_pred_num = multi_regressor.predict(new_data_combined)
+    new_pred_cat = multi_classifier.predict(new_data_combined)
     
     # Convert predicted categories back to original labels
     new_pred_cat_original = new_pred_cat.copy()
-    for i, col in enumerate(output_categorical_cols):
-        new_pred_cat_original[:, i] = output_label_encoders[col].inverse_transform(new_pred_cat[:, i])
+    new_pred_cat_original[:, 0] = label_encoders[indicator_col].inverse_transform(new_pred_cat[:, 0])
     
     # Create DataFrames for predicted values
-    new_pred_num_df = pd.DataFrame(new_pred_num, columns=output_numerical_cols, index=new_data.index)
-    new_pred_cat_df = pd.DataFrame(new_pred_cat_original, columns=output_categorical_cols, index=new_data.index)
+    new_pred_num_df = pd.DataFrame(new_pred_num, columns=y_numerical.columns, index=new_data.index)
+    new_pred_cat_df = pd.DataFrame(new_pred_cat_original, columns=y_categorical.columns, index=new_data.index)
     
     # Combine numerical and categorical predictions
     new_pred_df = pd.concat([new_pred_num_df, new_pred_cat_df], axis=1)
+    
+    # Rename columns back to their original names
+    new_pred_df.columns = [list(output_mapping.keys())[list(output_mapping.values()).index(col)] if col in output_mapping.values() else col for col in new_pred_df.columns]
     
     return new_pred_df
 
 # Example usage for new entries
 new_entries = {
     0: {'commission_type': 'R', 'price': 50000, 'quantity': 100, 'commission_amount': 500, 'factor': 0.1, 'indicator_short': 'B'},
-    1: {'commission_type': 'F', 'price': 75000, 'quantity': 50, 'commission_amount': 1000, 'factor': 0.2, 'indicator_short': 'S'}
+    1: {'commission_type': 'F', 'price': 75000, 'quantity': 50, 'commission_amount': 1000, 'factor': 0.2, 'indicator_short': 'S'},
+    2: {'commission_type': 'R', 'price': 60000, 'quantity': 75, 'commission_amount': 750, 'factor': 0.15, 'indicator_short': 'SS'},
+    3: {'commission_type': 'B', 'price': 80000, 'quantity': 60, 'commission_amount': 800, 'factor': 0.12, 'indicator_short': 'B'}
 }
 
 new_predictions = predict_new_entries(new_entries)
