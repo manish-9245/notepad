@@ -1,0 +1,105 @@
+import streamlit as st
+
+st.title("My Stepwise App")
+
+with st.expander("Step 1: Introduction", expanded=True):
+    st.write("Welcome to my app! This is the first step.")
+    st.image("intro_image.jpg")
+
+with st.expander("Step 2: Data Input"):
+    st.write("Please input your data:")
+    data = st.file_uploader("Upload CSV", type="csv")
+    if data:
+        # Process data
+        st.success("Data uploaded successfully!")
+
+with st.expander("Step 3: Analysis"):
+    if 'data' in locals() and data is not None:
+        st.write("Analyzing your data...")
+        # Perform analysis
+        st.line_chart(data)
+    else:
+        st.warning("Please complete Step 2 first.")
+
+with st.expander("Step 4: Results"):
+    if 'data' in locals() and data is not None:
+        st.write("Here are your results:")
+        # Show results
+    else:
+        st.info("Complete Steps 2 and 3 to see results.")
+
+--------------------------------------------
+  import streamlit as st
+
+st.title("My Stepwise App")
+
+with st.form("step1"):
+    st.header("Step 1: User Info")
+    name = st.text_input("Your Name")
+    age = st.number_input("Your Age", min_value=0, max_value=120)
+    submitted1 = st.form_submit_button("Next")
+
+if submitted1:
+    with st.form("step2"):
+        st.header("Step 2: Preferences")
+        color = st.color_picker("Favorite Color")
+        hobby = st.text_input("Hobby")
+        submitted2 = st.form_submit_button("Next")
+
+if 'submitted2' in locals() and submitted2:
+    with st.form("step3"):
+        st.header("Step 3: Feedback")
+        rating = st.slider("Rate Our App", 1, 5)
+        comments = st.text_area("Comments")
+        submitted3 = st.form_submit_button("Submit")
+
+if 'submitted3' in locals() and submitted3:
+    st.success("Thank you for completing all steps!")
+    st.write(f"Name: {name}, Age: {age}")
+    st.write(f"Favorite Color: {color}, Hobby: {hobby}")
+    st.write(f"App Rating: {rating}/5")
+    st.write(f"Comments: {comments}")
+
+-----------------------------------
+  import streamlit as st
+
+# Initialize session state
+if 'step' not in st.session_state:
+    st.session_state.step = 1
+
+def next_step():
+    st.session_state.step += 1
+
+def prev_step():
+    st.session_state.step -= 1
+
+st.title("My Stepwise App")
+
+if st.session_state.step == 1:
+    st.header("Step 1: Choose Dataset")
+    dataset = st.selectbox("Select Dataset", ["Iris", "Titanic", "Wine"])
+    st.button("Next", on_click=next_step)
+
+elif st.session_state.step == 2:
+    st.header("Step 2: Set Parameters")
+    model = st.radio("Choose Model", ["Linear Regression", "Random Forest", "SVM"])
+    test_size = st.slider("Test Size", 0.1, 0.5, 0.2)
+    st.button("Previous", on_click=prev_step)
+    st.button("Next", on_click=next_step)
+
+elif st.session_state.step == 3:
+    st.header("Step 3: Train Model")
+    st.write(f"Training {model} on {dataset} dataset...")
+    st.progress(0.6)  # Simulating progress
+    st.write("Accuracy: 85%")
+    st.button("Previous", on_click=prev_step)
+    st.button("Next", on_click=next_step)
+
+elif st.session_state.step == 4:
+    st.header("Step 4: Results")
+    st.success("Model trained successfully!")
+    st.write("Here's a summary of your choices:")
+    st.write(f"- Dataset: {dataset}")
+    st.write(f"- Model: {model}")
+    st.write(f"- Test Size: {test_size}")
+    st.button("Start Over", on_click=lambda: setattr(st.session_state, 'step', 1))
