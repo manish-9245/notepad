@@ -20,7 +20,7 @@ df['action_code'] = le.fit_transform(df['action'])
 X = df[['action_code', 'qty']]
 y = le.fit_transform(df['true_action'])
 
-X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Custom functions for gplearn
 def is_negative(x):
@@ -38,8 +38,8 @@ ite = make_function(function=if_then_else, name='ite', arity=3)
 
 # Create and train gplearn model
 est_gp = SymbolicClassifier(
-    population_size=1000,
-    generations=50,
+    population_size=5000,
+    generations=100,
     stopping_criteria=0.0,
     p_crossover=0.7,
     p_subtree_mutation=0.1,
@@ -89,32 +89,74 @@ def make_readable(node, feature_names):
     elif isinstance(node, (int, float)):
         return f"{node}"
     elif callable(node):
-        # If it's a function object, use our mapping or get its name
         return func_to_str.get(node, get_func_name(node))
     else:
         name, *args = node
         if callable(name):
-            # If the name is a function object, use our mapping or get its name
             name = func_to_str.get(name, get_func_name(name))
         
         if name == 'ite':
             cond, x, y = [make_readable(arg, feature_names) for arg in args]
-            return f"if {cond} then {x} else {y}"
+            return f"ite({cond}, {x}, {y})"
         elif name == 'is_neg':
             arg = make_readable(args[0], feature_names)
-            return f"{arg} < 0"
+            return f"is_neg({arg})"
         elif name == 'flip':
             arg = make_readable(args[0], feature_names)
-            return f"NOT {arg}"
+            return f"flip({arg})"
         else:
             args = [make_readable(arg, feature_names) for arg in args]
             return f"{name}({', '.join(args)})"
 
-# Convert the best program to a readable format
-feature_names = ['action', 'qty']
-readable_rule = make_readable(est_gp._program.program, feature_names)
-print("Rule in Plain English:")
-print(readable_rule)
+# New function to translate gplearn's rule into domain-specific language
+def translate_to_trading_rule(program, feature_names):
+    def _translate(node):
+        if isinstance(node, str):
+            if node == 'action':
+                return "the trader's original intention"
+            elif node == 'qty':
+                return "the order quantity"
+            else:
+                return node
+        elif isinstance(node, (int, float)):
+            return f"{node}"
+        elif callable(node):
+            name = func_to_str.get(node, get_func_name(node))
+            if name == 'is_neg':
+                return "is a short position (qty < 0)"
+            elif name == 'flip':
+                return "reverse the trader's intention"
+            else:
+                return name
+        else:
+            name, *args = node
+            if callable(name):
+                name = func_to_str.get(name, get_func_name(name))
+            
+            if name == 'ite':
+                cond, x, y = map(_translate, args)
+                return f"If {cond}, then {x}. Otherwise, {y}."
+            elif name == 'is_neg':
+                arg = _translate(args[0])
+                return f"{arg} is a short position"
+            elif name == 'flip':
+                arg = _translate(args[0])
+                return f"reverse {arg}"
+            else:
+                args = map(_translate, args)
+                return f"{name}({', '.join(args)})"
+    
+    rule = _translate(program.program)
+    return f"Trading Rule: {rule}"
+
+# Convert the best program to a readable format and then to a trading rule
+symbolic_rule = make_readable(est_gp._program.program, ['action', 'qty'])
+print("Symbolic Rule:")
+print(symbolic_rule)
+print("\n")
+
+trading_rule = translate_to_trading_rule(est_gp._program, ['action', 'qty'])
+print(trading_rule)
 print("\n")
 
 # Test the rule on some examples
@@ -137,4 +179,5 @@ for example in examples:
     y_pred = est_gp.predict(X_new)
     predicted_action = le.inverse_transform(y_pred)[0]
     
-    print(f"Original: {action} {qty} -> Predicted: {predicted_action}")
+    print(f"Scenario: Trader wants to {action} {qty} units")
+    print(f"  System advises: {predicted_action}\n")
