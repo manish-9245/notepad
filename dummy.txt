@@ -5,7 +5,7 @@ from gplearn.functions import make_function
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-# Sample data (same as before)
+# Sample data and preprocessing (same as before)
 data = {
     'action': ['Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
     'qty': [100, -50, -75, 200, -120, 80, 50, -90]
@@ -15,13 +15,11 @@ df['true_action'] = np.where(df['qty'] < 0,
                            np.where(df['action'] == 'Buy', 'Sell', 'Buy'),
                            df['action'])
 
-# Prepare data for model (same as before)
 le = LabelEncoder()
 df['action_code'] = le.fit_transform(df['action'])
 X = df[['action_code', 'qty']]
 y = le.fit_transform(df['true_action'])
 
-# Split data
 X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Custom functions for gplearn
@@ -41,7 +39,7 @@ ite = make_function(function=if_then_else, name='ite', arity=3)
 # Create and train gplearn model
 est_gp = SymbolicClassifier(
     population_size=1000,
-    generations=50,  # Increase generations for better convergence
+    generations=50,
     stopping_criteria=0.0,
     p_crossover=0.7,
     p_subtree_mutation=0.1,
@@ -49,11 +47,11 @@ est_gp = SymbolicClassifier(
     p_point_mutation=0.1,
     max_samples=0.9,
     verbose=1,
-    parsimony_coefficient=0.01,  # Prefer simpler models
+    parsimony_coefficient=0.01,
     random_state=42,
     function_set=(
-        'add', 'sub', 'mul', 'div',  # Basic arithmetic
-        is_neg, flip_func, ite       # Our custom functions
+        'add', 'sub', 'mul', 'div',
+        is_neg, flip_func, ite
     )
 )
 
@@ -63,6 +61,16 @@ est_gp.fit(X_train, y_train)
 print("Best program found by gplearn:")
 print(est_gp._program)
 print("\n")
+
+# Mapping of function objects to their string names
+func_to_str = {
+    is_neg.__wrapped__: 'is_neg',
+    flip.__wrapped__: 'flip',
+    ite.__wrapped__: 'ite',
+    is_negative: 'is_neg',
+    flip: 'flip',
+    if_then_else: 'ite'
+}
 
 # Helper function to make the rule more readable
 def make_readable(node, feature_names):
@@ -74,13 +82,14 @@ def make_readable(node, feature_names):
             return node
     elif isinstance(node, (int, float)):
         return f"{node}"
+    elif callable(node):
+        # If it's a function object, use our mapping
+        return func_to_str.get(node, str(node))
     else:
-        if not hasattr(node, '__iter__'):
-            # Some nodes might be function objects
-            return str(node)
-        
         name, *args = node
-        name = str(name)  # Convert function object to string if needed
+        if callable(name):
+            # If the name is a function object, use our mapping
+            name = func_to_str.get(name.__wrapped__, str(name))
         
         if name == 'ite':
             cond, x, y = [make_readable(arg, feature_names) for arg in args]
