@@ -21,7 +21,7 @@ df['action_code'] = le.fit_transform(df['action'])
 X = df[['action_code', 'qty']]
 y = le.fit_transform(df['true_action'])
 
-# Split data (no need for test set here as we're just interpreting the rule)
+# Split data
 X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Custom functions for gplearn
@@ -72,12 +72,18 @@ def make_readable(node, feature_names):
             return feature_names[idx]
         else:
             return node
-    elif isinstance(node, float):
-        return f"{node:.2f}"
+    elif isinstance(node, (int, float)):
+        return f"{node}"
     else:
+        if not hasattr(node, '__iter__'):
+            # Some nodes might be function objects
+            return str(node)
+        
         name, *args = node
+        name = str(name)  # Convert function object to string if needed
+        
         if name == 'ite':
-            cond, x, y = map(lambda arg: make_readable(arg, feature_names), args)
+            cond, x, y = [make_readable(arg, feature_names) for arg in args]
             return f"if {cond} then {x} else {y}"
         elif name == 'is_neg':
             arg = make_readable(args[0], feature_names)
@@ -86,7 +92,7 @@ def make_readable(node, feature_names):
             arg = make_readable(args[0], feature_names)
             return f"NOT {arg}"
         else:
-            args = map(lambda arg: make_readable(arg, feature_names), args)
+            args = [make_readable(arg, feature_names) for arg in args]
             return f"{name}({', '.join(args)})"
 
 # Convert the best program to a readable format
