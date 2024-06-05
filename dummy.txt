@@ -62,11 +62,17 @@ print("Best program found by gplearn:")
 print(est_gp._program)
 print("\n")
 
+# Function to get the name of a function
+def get_func_name(func):
+    if hasattr(func, '__name__'):
+        return func.__name__
+    elif hasattr(func, 'name'):
+        return func.name
+    else:
+        return str(func)
+
 # Mapping of function objects to their string names
 func_to_str = {
-    is_neg.__wrapped__: 'is_neg',
-    flip.__wrapped__: 'flip',
-    ite.__wrapped__: 'ite',
     is_negative: 'is_neg',
     flip: 'flip',
     if_then_else: 'ite'
@@ -83,13 +89,13 @@ def make_readable(node, feature_names):
     elif isinstance(node, (int, float)):
         return f"{node}"
     elif callable(node):
-        # If it's a function object, use our mapping
-        return func_to_str.get(node, str(node))
+        # If it's a function object, use our mapping or get its name
+        return func_to_str.get(node, get_func_name(node))
     else:
         name, *args = node
         if callable(name):
-            # If the name is a function object, use our mapping
-            name = func_to_str.get(name.__wrapped__, str(name))
+            # If the name is a function object, use our mapping or get its name
+            name = func_to_str.get(name, get_func_name(name))
         
         if name == 'ite':
             cond, x, y = [make_readable(arg, feature_names) for arg in args]
