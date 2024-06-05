@@ -1,9 +1,3 @@
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, accuracy_score
-
 # Load the data
 input_file = 'input_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
 output_file = 'output_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
@@ -11,44 +5,91 @@ output_file = 'output_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
 inp_df = pd.read_csv(input_file)
 out_df = pd.read_csv(output_file)
 
-# Preprocess the data
+# Define preprocessing for numeric and categorical features
+numeric_features = ['price', 'quantity', 'commission_amount', 'factor']
+categorical_features = ['commission_type', 'indicator_short']
+
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),
+    ('scaler', StandardScaler())
+])
+
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))
+])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)
+    ])
+
+# Define the models
+regressor = RandomForestRegressor(random_state=42)
+classifier = RandomForestClassifier(random_state=42)
+
+# Combine preprocessing and model into a pipeline
+pipeline_regressor = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('regressor', MultiOutputRegressor(regressor))
+])
+
+pipeline_classifier = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('classifier', classifier)
+])
+
+# Prepare the target variables
+y_reg = out_df[['principal_amt', 'full_commission']]
+y_class = out_df['indicator_long']
+
+# Encode the target variable for classification
 label_enc = LabelEncoder()
-inp_df['commission_type'] = label_enc.fit_transform(inp_df['commission_type'])
-inp_df['indicator_short'] = label_enc.fit_transform(inp_df['indicator_short'])
-
-# Standardize the numerical features
-scaler = StandardScaler()
-inp_df[['price', 'quantity', 'commission_amount', 'factor']] = scaler.fit_transform(inp_df[['price', 'quantity', 'commission_amount', 'factor']])
-
-# Prepare training data
-X = inp_df.values
-y_principal_amt = out_df['principal_amt'].values
-y_full_commission = out_df['full_commission'].values
-y_indicator_long = label_enc.fit_transform(out_df['indicator_long'])
+y_class_encoded = label_enc.fit_transform(y_class)
 
 # Split the data
-X_train, X_test, y_train_principal_amt, y_test_principal_amt = train_test_split(X, y_principal_amt, test_size=0.2, random_state=42)
-X_train, X_test, y_train_full_commission, y_test_full_commission = train_test_split(X, y_full_commission, test_size=0.2, random_state=42)
-X_train, X_test, y_train_indicator_long, y_test_indicator_long = train_test_split(X, y_indicator_long, test_size=0.2, random_state=42)
+X_train, X_test, y_train_reg, y_test_reg = train_test_split(inp_df, y_reg, test_size=0.2, random_state=42)
+X_train, X_test, y_train_class, y_test_class = train_test_split(inp_df, y_class_encoded, test_size=0.2, random_state=42)
 
 # Train the models
-model_principal_amt = RandomForestRegressor(random_state=42)
-model_full_commission = RandomForestRegressor(random_state=42)
-model_indicator_long = RandomForestClassifier(random_state=42)
-
-model_principal_amt.fit(X_train, y_train_principal_amt)
-model_full_commission.fit(X_train, y_train_full_commission)
-model_indicator_long.fit(X_train, y_train_indicator_long)
+pipeline_regressor.fit(X_train, y_train_reg)
+pipeline_classifier.fit(X_train, y_train_class)
 
 # Predict and evaluate
-y_pred_principal_amt = model_principal_amt.predict(X_test)
-y_pred_full_commission = model_full_commission.predict(X_test)
-y_pred_indicator_long = model_indicator_long.predict(X_test)
+y_pred_reg = pipeline_regressor.predict(X_test)
+y_pred_class = pipeline_classifier.predict(X_test)
 
-mse_principal_amt = mean_squared_error(y_test_principal_amt, y_pred_principal_amt)
-mse_full_commission = mean_squared_error(y_test_full_commission, y_pred_full_commission)
-accuracy_indicator_long = accuracy_score(y_test_indicator_long, y_pred_indicator_long)
+mse_principal_amt = mean_squared_error(y_test_reg['principal_amt'], y_pred_reg[:, 0])
+mse_full_commission = mean_squared_error(y_test_reg['full_commission'], y_pred_reg[:, 1])
+accuracy_indicator_long = accuracy_score(y_test_class, y_pred_class)
 
 print("MSE Principal Amt:", mse_principal_amt)
 print("MSE Full Commission:", mse_full_commission)
 print("Accuracy Indicator Long:", accuracy_indicator_long)
+
+# To make predictions on new data
+def predict_new_data(new_data):
+    new_data_processed = pipeline_regressor['preprocessor'].transform(new_data)
+    new_principal_amt, new_full_commission = pipeline_regressor['regressor'].predict(new_data_processed)
+    new_indicator_long = pipeline_classifier['classifier'].predict(new_data_processed)
+    new_indicator_long_decoded = label_enc.inverse_transform(new_indicator_long)
+    return new_principal_amt, new_full_commission, new_indicator_long_decoded
+
+# Example new data
+new_data = pd.DataFrame({
+    'commission_type': ['R', 'F'],
+    'price': [500000, 750000],
+    'quantity': [10000, 20000],
+    'commission_amount': [5000, 7000],
+    'factor': [0.05, 0.1],
+    'indicator_short': ['B', 'S']
+})
+
+# Make predictions
+new_principal_amt, new_full_commission, new_indicator_long_decoded = predict_new_data(new_data)
+
+# Print predictions
+print("New Principal Amt Predictions:", new_principal_amt)
+print("New Full Commission Predictions:", new_full_commission)
+print("New Indicator Long Predictions:", new_indicator_long_decoded)
