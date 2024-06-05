@@ -1,66 +1,54 @@
 import pandas as pd
-import numpy as np
-import random
-from datetime import datetime
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, accuracy_score
 
-def calculate_principal_amt(qty, factor, price):
-    return qty * (factor / 100) * (price / 100)
+# Load the data
+input_file = 'input_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
+output_file = 'output_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
 
-def calculate_full_commission(price, qty, comm_amt, comm_type):
-    if comm_type == 'R':
-        return (price * qty) + (comm_amt * qty)
-    elif comm_type == 'F':
-        return (price * qty) + comm_amt
-    else:
-        return price * qty
+inp_df = pd.read_csv(input_file)
+out_df = pd.read_csv(output_file)
 
-def calculate_indicator(ind):
-    if ind == 'B':
-        return "BUY"
-    elif ind == 'S':
-        return "SELL"
-    elif ind == 'SS':
-        return "Short Sell"
-    else:
-        return "Unknown"
+# Preprocess the data
+label_enc = LabelEncoder()
+inp_df['commission_type'] = label_enc.fit_transform(inp_df['commission_type'])
+inp_df['indicator_short'] = label_enc.fit_transform(inp_df['indicator_short'])
 
-input_cols = ['commission_type', 'price', 'quantity', 'commission_amount', 'factor', 'indicator_short']
-output_cols = ['principal_amt', 'full_commission', 'indicator_long']
+# Standardize the numerical features
+scaler = StandardScaler()
+inp_df[['price', 'quantity', 'commission_amount', 'factor']] = scaler.fit_transform(inp_df[['price', 'quantity', 'commission_amount', 'factor']])
 
-comm_type = ['R', 'F', 'B']
-ind_short = ['B', 'S', 'SS']
+# Prepare training data
+X = inp_df.values
+y_principal_amt = out_df['principal_amt'].values
+y_full_commission = out_df['full_commission'].values
+y_indicator_long = label_enc.fit_transform(out_df['indicator_long'])
 
-input_dict = dict()
-output_dict = dict()
+# Split the data
+X_train, X_test, y_train_principal_amt, y_test_principal_amt = train_test_split(X, y_principal_amt, test_size=0.2, random_state=42)
+X_train, X_test, y_train_full_commission, y_test_full_commission = train_test_split(X, y_full_commission, test_size=0.2, random_state=42)
+X_train, X_test, y_train_indicator_long, y_test_indicator_long = train_test_split(X, y_indicator_long, test_size=0.2, random_state=42)
 
-rows = 5000
-for i in range(rows):
-    inp_com_type = random.choice(comm_type)
-    inp_price = random.uniform(0, 1000000)
-    qty = random.randint(0, 1000000)
-    inp_comm_amt = random.uniform(0, 1000000)
-    factor = random.random()
-    inp_ind = random.choice(ind_short)
+# Train the models
+model_principal_amt = RandomForestRegressor(random_state=42)
+model_full_commission = RandomForestRegressor(random_state=42)
+model_indicator_long = RandomForestClassifier(random_state=42)
 
-    input_dict[i] = dict()
-    input_dict[i]["commission_type"] = inp_com_type
-    input_dict[i]["price"] = inp_price
-    input_dict[i]["quantity"] = qty
-    input_dict[i]["commission_amount"] = inp_comm_amt
-    input_dict[i]["factor"] = factor
-    input_dict[i]["indicator_short"] = inp_ind
+model_principal_amt.fit(X_train, y_train_principal_amt)
+model_full_commission.fit(X_train, y_train_full_commission)
+model_indicator_long.fit(X_train, y_train_indicator_long)
 
-    principal = calculate_principal_amt(qty, factor, inp_price)
-    full_commission = calculate_full_commission(inp_price, qty, inp_comm_amt, inp_com_type)
-    indicator_long = calculate_indicator(inp_ind)
+# Predict and evaluate
+y_pred_principal_amt = model_principal_amt.predict(X_test)
+y_pred_full_commission = model_full_commission.predict(X_test)
+y_pred_indicator_long = model_indicator_long.predict(X_test)
 
-    output_dict[i] = dict()
-    output_dict[i]['principal_amt'] = principal
-    output_dict[i]['full_commission'] = full_commission
-    output_dict[i]['indicator_long'] = indicator_long
+mse_principal_amt = mean_squared_error(y_test_principal_amt, y_pred_principal_amt)
+mse_full_commission = mean_squared_error(y_test_full_commission, y_pred_full_commission)
+accuracy_indicator_long = accuracy_score(y_test_indicator_long, y_pred_indicator_long)
 
-inp_df = pd.DataFrame.from_dict(input_dict, orient='index')
-inp_df.to_csv('input_{}.csv'.format(datetime.today().strftime('%Y-%m-%d')), index=False)
-
-out_df = pd.DataFrame.from_dict(output_dict, orient='index')
-out_df.to_csv('output_{}.csv'.format(datetime.today().strftime('%Y-%m-%d')), index=False)
+print("MSE Principal Amt:", mse_principal_amt)
+print("MSE Full Commission:", mse_full_commission)
+print("Accuracy Indicator Long:", accuracy_indicator_long)
