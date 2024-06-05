@@ -1,0 +1,63 @@
+from sklearn.tree import DecisionTreeClassifier, export_text
+import numpy as np
+import pandas as pd
+
+# Sample data
+data = {
+    'action': ['Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
+    'qty': [100, -50, -75, 200, -120, 80]
+}
+df = pd.DataFrame(data)
+
+# Create target: True action based on qty sign
+df['true_action'] = np.where(df['qty'] < 0, 
+                           np.where(df['action'] == 'Buy', 'Sell', 'Buy'),
+                           df['action'])
+
+# Prepare data for model
+X = pd.get_dummies(df[['action']], drop_first=True)
+X['qty'] = df['qty']
+y = df['true_action']
+
+# Train decision tree
+clf = DecisionTreeClassifier(max_depth=3)
+clf.fit(X, y)
+
+# Print the tree structure
+print(export_text(clf, feature_names=list(X.columns)))
+
+# Example prediction
+new_data = pd.DataFrame({'action': ['Buy'], 'qty': [-50]})
+new_X = pd.get_dummies(new_data[['action']], drop_first=True)
+new_X['qty'] = new_data['qty']
+prediction = clf.predict(new_X)
+print(f"Predicted true action: {prediction[0]}")
+  -----------------------------------------------------------
+  !pip install skope-rules
+
+from skrules import SkopeRules
+import pandas as pd
+import numpy as np
+
+# Using the same data as before
+...
+
+# Train Skope-rules
+clf = SkopeRules(max_depth_duplication=None, 
+                n_estimators=30, 
+                precision_min=0.2, 
+                recall_min=0.01)
+clf.fit(X, y)
+
+# Print learned rules
+for i, rule in enumerate(clf.rules_):
+    print(f"{i}: {rule}")
+
+# Example prediction
+new_data = pd.DataFrame({'action': ['Sell'], 'qty': [-50]})
+new_X = pd.get_dummies(new_data[['action']], drop_first=True)
+new_X['qty'] = new_data['qty']
+prediction = clf.predict(new_X)
+print(f"Predicted true action: {prediction[0]}")
+--------------------------------------------------------------
+  
