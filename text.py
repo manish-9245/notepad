@@ -1,95 +1,133 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.multioutput import MultiOutputRegressor, MultiOutputClassifier
+from datetime import datetime
+
 # Load the data
-input_file = 'input_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
-output_file = 'output_{}.csv'.format(datetime.today().strftime('%Y-%m-%d'))
+input_file = 'input_2023-06-05.csv'  # Replace with your actual file name
+output_file = 'output_2023-06-05.csv'  # Replace with your actual file name
 
-inp_df = pd.read_csv(input_file)
-out_df = pd.read_csv(output_file)
+input_df = pd.read_csv(input_file, index_col=0)
+output_df = pd.read_csv(output_file, index_col=0)
 
-# Define preprocessing for numeric and categorical features
-numeric_features = ['price', 'quantity', 'commission_amount', 'factor']
-categorical_features = ['commission_type', 'indicator_short']
+# Identify numerical and categorical columns
+numerical_cols = input_df.select_dtypes(include=[np.number]).columns
+categorical_cols = input_df.select_dtypes(include=[object]).columns
 
+# Initialize label encoders for each categorical column
+label_encoders = {}
+for col in categorical_cols:
+    label_encoders[col] = LabelEncoder()
+    input_df[col] = label_encoders[col].fit_transform(input_df[col])
+
+# Split the data into features (X) and targets (y)
+X = input_df
+y_numerical = output_df.select_dtypes(include=[np.number])
+y_categorical = output_df.select_dtypes(include=[object])
+
+# Split into training and testing sets
+X_train, X_test, y_train_num, y_test_num, y_train_cat, y_test_cat = train_test_split(
+    X, y_numerical, y_categorical, test_size=0.2, random_state=42
+)
+
+# Create column transformers for numerical and categorical columns
 numeric_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='median')),
     ('scaler', StandardScaler())
-])
-
-categorical_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='most_frequent')),
-    ('onehot', OneHotEncoder(handle_unknown='ignore'))
 ])
 
 preprocessor = ColumnTransformer(
     transformers=[
-        ('num', numeric_transformer, numeric_features),
-        ('cat', categorical_transformer, categorical_features)
+        ('num', numeric_transformer, numerical_cols)
     ])
 
-# Define the models
-regressor = RandomForestRegressor(random_state=42)
-classifier = RandomForestClassifier(random_state=42)
+# Initialize models
+regressor = RandomForestRegressor(n_estimators=100, random_state=42)
+classifier = RandomForestClassifier(n_estimators=100, random_state=42)
 
-# Combine preprocessing and model into a pipeline
-pipeline_regressor = Pipeline(steps=[
+# Create multi-output models
+multi_regressor = MultiOutputRegressor(regressor)
+multi_classifier = MultiOutputClassifier(classifier)
+
+# Create pipelines
+reg_pipeline = Pipeline(steps=[
     ('preprocessor', preprocessor),
-    ('regressor', MultiOutputRegressor(regressor))
+    ('regressor', multi_regressor)
 ])
 
-pipeline_classifier = Pipeline(steps=[
+clf_pipeline = Pipeline(steps=[
     ('preprocessor', preprocessor),
-    ('classifier', classifier)
+    ('classifier', multi_classifier)
 ])
 
-# Prepare the target variables
-y_reg = out_df[['principal_amt', 'full_commission']]
-y_class = out_df['indicator_long']
+# Train models
+reg_pipeline.fit(X_train, y_train_num)
+clf_pipeline.fit(X_train, y_train_cat)
 
-# Encode the target variable for classification
-label_enc = LabelEncoder()
-y_class_encoded = label_enc.fit_transform(y_class)
+# Make predictions on test set
+y_pred_num = reg_pipeline.predict(X_test)
+y_pred_cat = clf_pipeline.predict(X_test)
 
-# Split the data
-X_train, X_test, y_train_reg, y_test_reg = train_test_split(inp_df, y_reg, test_size=0.2, random_state=42)
-X_train, X_test, y_train_class, y_test_class = train_test_split(inp_df, y_class_encoded, test_size=0.2, random_state=42)
+# Convert predicted categories back to original labels
+y_pred_cat_original = y_pred_cat.copy()
+for i, col in enumerate(y_categorical.columns):
+    y_pred_cat_original[:, i] = label_encoders[col].inverse_transform(y_pred_cat[:, i])
 
-# Train the models
-pipeline_regressor.fit(X_train, y_train_reg)
-pipeline_classifier.fit(X_train, y_train_class)
+# Create DataFrames for predicted values
+y_pred_num_df = pd.DataFrame(y_pred_num, columns=y_numerical.columns, index=y_test_num.index)
+y_pred_cat_df = pd.DataFrame(y_pred_cat_original, columns=y_categorical.columns, index=y_test_cat.index)
 
-# Predict and evaluate
-y_pred_reg = pipeline_regressor.predict(X_test)
-y_pred_class = pipeline_classifier.predict(X_test)
+# Combine numerical and categorical predictions
+y_pred_df = pd.concat([y_pred_num_df, y_pred_cat_df], axis=1)
 
-mse_principal_amt = mean_squared_error(y_test_reg['principal_amt'], y_pred_reg[:, 0])
-mse_full_commission = mean_squared_error(y_test_reg['full_commission'], y_pred_reg[:, 1])
-accuracy_indicator_long = accuracy_score(y_test_class, y_pred_class)
+# Save predictions to CSV
+y_pred_df.to_csv(f'predictions_{datetime.today().strftime("%Y-%m-%d")}.csv')
 
-print("MSE Principal Amt:", mse_principal_amt)
-print("MSE Full Commission:", mse_full_commission)
-print("Accuracy Indicator Long:", accuracy_indicator_long)
+# Function to make predictions for new entries
+def predict_new_entries(new_data):
+    # Convert new_data to DataFrame if it's a dictionary
+    if isinstance(new_data, dict):
+        new_data = pd.DataFrame.from_dict(new_data, orient='index')
+    
+    # Ensure all columns are present and in the correct order
+    missing_cols = set(X.columns) - set(new_data.columns)
+    for col in missing_cols:
+        new_data[col] = 0  # or any appropriate default value
 
-# To make predictions on new data
-def predict_new_data(new_data):
-    new_data_processed = pipeline_regressor['preprocessor'].transform(new_data)
-    new_principal_amt, new_full_commission = pipeline_regressor['regressor'].predict(new_data_processed)
-    new_indicator_long = pipeline_classifier['classifier'].predict(new_data_processed)
-    new_indicator_long_decoded = label_enc.inverse_transform(new_indicator_long)
-    return new_principal_amt, new_full_commission, new_indicator_long_decoded
+    new_data = new_data[X.columns]
+    
+    # Encode categorical columns
+    for col in categorical_cols:
+        new_data[col] = label_encoders[col].transform(new_data[col])
+    
+    # Make predictions
+    new_pred_num = reg_pipeline.predict(new_data)
+    new_pred_cat = clf_pipeline.predict(new_data)
+    
+    # Convert predicted categories back to original labels
+    new_pred_cat_original = new_pred_cat.copy()
+    for i, col in enumerate(y_categorical.columns):
+        new_pred_cat_original[:, i] = label_encoders[col].inverse_transform(new_pred_cat[:, i])
+    
+    # Create DataFrames for predicted values
+    new_pred_num_df = pd.DataFrame(new_pred_num, columns=y_numerical.columns, index=new_data.index)
+    new_pred_cat_df = pd.DataFrame(new_pred_cat_original, columns=y_categorical.columns, index=new_data.index)
+    
+    # Combine numerical and categorical predictions
+    new_pred_df = pd.concat([new_pred_num_df, new_pred_cat_df], axis=1)
+    
+    return new_pred_df
 
-# Example new data
-new_data = pd.DataFrame({
-    'commission_type': ['R', 'F'],
-    'price': [500000, 750000],
-    'quantity': [10000, 20000],
-    'commission_amount': [5000, 7000],
-    'factor': [0.05, 0.1],
-    'indicator_short': ['B', 'S']
-})
+# Example usage for new entries
+new_entries = {
+    0: {'commission_type': 'R', 'price': 50000, 'quantity': 100, 'commission_amount': 500, 'factor': 0.1, 'indicator_short': 'B'},
+    1: {'commission_type': 'F', 'price': 75000, 'quantity': 50, 'commission_amount': 1000, 'factor': 0.2, 'indicator_short': 'S'}
+}
 
-# Make predictions
-new_principal_amt, new_full_commission, new_indicator_long_decoded = predict_new_data(new_data)
-
-# Print predictions
-print("New Principal Amt Predictions:", new_principal_amt)
-print("New Full Commission Predictions:", new_full_commission)
-print("New Indicator Long Predictions:", new_indicator_long_decoded)
+new_predictions = predict_new_entries(new_entries)
+print("Predictions for new entries:")
+print(new_predictions)
