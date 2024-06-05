@@ -1,105 +1,80 @@
-import streamlit as st
+import pandas as pd
+import numpy as np
+from gplearn.genetic import SymbolicClassifier
+from gplearn.functions import make_function
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
-st.title("My Stepwise App")
+# Sample data
+data = {
+    'action': ['Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell', 'Buy', 'Sell'],
+    'qty': [100, -50, -75, 200, -120, 80, 50, -90]
+}
+df = pd.DataFrame(data)
 
-with st.expander("Step 1: Introduction", expanded=True):
-    st.write("Welcome to my app! This is the first step.")
-    st.image("intro_image.jpg")
+# Create target: True action based on qty sign
+df['true_action'] = np.where(df['qty'] < 0, 
+                           np.where(df['action'] == 'Buy', 'Sell', 'Buy'),
+                           df['action'])
 
-with st.expander("Step 2: Data Input"):
-    st.write("Please input your data:")
-    data = st.file_uploader("Upload CSV", type="csv")
-    if data:
-        # Process data
-        st.success("Data uploaded successfully!")
+# Prepare data for model
+le = LabelEncoder()
+df['action_code'] = le.fit_transform(df['action'])
+X = df[['action_code', 'qty']]
+y = le.fit_transform(df['true_action'])
 
-with st.expander("Step 3: Analysis"):
-    if 'data' in locals() and data is not None:
-        st.write("Analyzing your data...")
-        # Perform analysis
-        st.line_chart(data)
-    else:
-        st.warning("Please complete Step 2 first.")
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-with st.expander("Step 4: Results"):
-    if 'data' in locals() and data is not None:
-        st.write("Here are your results:")
-        # Show results
-    else:
-        st.info("Complete Steps 2 and 3 to see results.")
+# Custom functions for gplearn
+def is_negative(x):
+    return np.where(x < 0, 1, 0)
 
---------------------------------------------
-  import streamlit as st
+def equals(x, y):
+    return np.where(x == y, 1, 0)
 
-st.title("My Stepwise App")
+def flip(x):
+    return 1 - x
 
-with st.form("step1"):
-    st.header("Step 1: User Info")
-    name = st.text_input("Your Name")
-    age = st.number_input("Your Age", min_value=0, max_value=120)
-    submitted1 = st.form_submit_button("Next")
+is_neg = make_function(function=is_negative, name='is_neg', arity=1)
+eq = make_function(function=equals, name='eq', arity=2)
+flip_func = make_function(function=flip, name='flip', arity=1)
 
-if submitted1:
-    with st.form("step2"):
-        st.header("Step 2: Preferences")
-        color = st.color_picker("Favorite Color")
-        hobby = st.text_input("Hobby")
-        submitted2 = st.form_submit_button("Next")
+# Create and train gplearn model
+est_gp = SymbolicClassifier(
+    population_size=1000,
+    generations=20,
+    stopping_criteria=0.0,
+    p_crossover=0.7,
+    p_subtree_mutation=0.1,
+    p_hoist_mutation=0.05,
+    p_point_mutation=0.1,
+    max_samples=0.9,
+    verbose=1,
+    parsimony_coefficient=0.01,
+    random_state=0,
+    function_set=('and', 'or', 'not', 'if', 'eq', 'is_neg', 'flip')
+)
 
-if 'submitted2' in locals() and submitted2:
-    with st.form("step3"):
-        st.header("Step 3: Feedback")
-        rating = st.slider("Rate Our App", 1, 5)
-        comments = st.text_area("Comments")
-        submitted3 = st.form_submit_button("Submit")
+est_gp.fit(X_train, y_train)
 
-if 'submitted3' in locals() and submitted3:
-    st.success("Thank you for completing all steps!")
-    st.write(f"Name: {name}, Age: {age}")
-    st.write(f"Favorite Color: {color}, Hobby: {hobby}")
-    st.write(f"App Rating: {rating}/5")
-    st.write(f"Comments: {comments}")
+# Print the best program
+print("Best program:", est_gp._program)
 
------------------------------------
-  import streamlit as st
+# Make predictions on test set
+y_pred = est_gp.predict(X_test)
 
-# Initialize session state
-if 'step' not in st.session_state:
-    st.session_state.step = 1
+# Calculate accuracy
+accuracy = (y_pred == y_test).mean()
+print(f"Accuracy: {accuracy}")
 
-def next_step():
-    st.session_state.step += 1
-
-def prev_step():
-    st.session_state.step -= 1
-
-st.title("My Stepwise App")
-
-if st.session_state.step == 1:
-    st.header("Step 1: Choose Dataset")
-    dataset = st.selectbox("Select Dataset", ["Iris", "Titanic", "Wine"])
-    st.button("Next", on_click=next_step)
-
-elif st.session_state.step == 2:
-    st.header("Step 2: Set Parameters")
-    model = st.radio("Choose Model", ["Linear Regression", "Random Forest", "SVM"])
-    test_size = st.slider("Test Size", 0.1, 0.5, 0.2)
-    st.button("Previous", on_click=prev_step)
-    st.button("Next", on_click=next_step)
-
-elif st.session_state.step == 3:
-    st.header("Step 3: Train Model")
-    st.write(f"Training {model} on {dataset} dataset...")
-    st.progress(0.6)  # Simulating progress
-    st.write("Accuracy: 85%")
-    st.button("Previous", on_click=prev_step)
-    st.button("Next", on_click=next_step)
-
-elif st.session_state.step == 4:
-    st.header("Step 4: Results")
-    st.success("Model trained successfully!")
-    st.write("Here's a summary of your choices:")
-    st.write(f"- Dataset: {dataset}")
-    st.write(f"- Model: {model}")
-    st.write(f"- Test Size: {test_size}")
-    st.button("Start Over", on_click=lambda: setattr(st.session_state, 'step', 1))
+# Example predictions
+new_data = pd.DataFrame({
+    'action': ['Buy', 'Sell', 'Buy'],
+    'qty': [-50, -75, 100]
+})
+new_data['action_code'] = le.transform(new_data['action'])
+X_new = new_data[['action_code', 'qty']]
+y_pred_new = est_gp.predict(X_new)
+new_data['predicted_action'] = le.inverse_transform(y_pred_new)
+print("\nPredictions:")
+print(new_data)
