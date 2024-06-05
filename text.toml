@@ -1,0 +1,44 @@
+[theme]
+# Background color as a black gradient
+primaryColor = "#FF6B00"  # A vibrant orange color
+backgroundColor = "#000000"  # Black base color
+secondaryBackgroundColor = "#0F0F0F"  # Slightly lighter black for gradient effect
+textColor = "#FFFFFF"  # White text color
+font = "sans serif"
+
+[theme.gradients]
+# Creating a subtle black gradient effect
+gradientTop = "#000000"  # Pure black at the top
+gradientBottom = "#101010"  # Very dark gray at the bottom
+
+[theme.textStyles]
+# Setting different text styles
+headerColor = "#FF6B00"  # Vibrant orange for headers
+subtleTextColor = "#CCCCCC"  # Light gray for subtle text
+linkColor = "#FFA366"  # Light orange for links
+bodyColor = "#FFFFFF"  # White for body text
+
+[server]
+# Server configurations
+port = 8501
+enableCORS = false
+
+[browser]
+# Browser settings
+gatherUsageStats = false
+
+[client]
+# Client-side settings
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[theme.componentStyles]
+# Component-specific styles
+buttonColor = "#FF6B00"  # Orange buttons
+sliderColor = "#FFA366"  # Light orange sliders
+inputColor = "#1C1C1C"  # Dark gray input fields
+inputTextColor = "#FFFFFF"  # White text in input fields
+
+[logger]
+# Logging settings
+level = "info"
