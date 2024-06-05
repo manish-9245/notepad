@@ -35,9 +35,19 @@ def equals(x, y):
 def flip(x):
     return 1 - x
 
+def if_then_else(x, y, z):
+    return np.where(x, y, z)
+
 is_neg = make_function(function=is_negative, name='is_neg', arity=1)
 eq = make_function(function=equals, name='eq', arity=2)
 flip_func = make_function(function=flip, name='flip', arity=1)
+ite = make_function(function=if_then_else, name='ite', arity=3)
+
+# Default functions from gplearn
+from gplearn.functions import _protected_sqrt, _protected_log, _protected_inv
+sqrt = make_function(function=_protected_sqrt, name='sqrt', arity=1)
+log = make_function(function=_protected_log, name='log', arity=1)
+inv = make_function(function=_protected_inv, name='inv', arity=1)
 
 # Create and train gplearn model
 est_gp = SymbolicClassifier(
@@ -52,7 +62,12 @@ est_gp = SymbolicClassifier(
     verbose=1,
     parsimony_coefficient=0.01,
     random_state=0,
-    function_set=('and', 'or', 'not', 'if', 'eq', 'is_neg', 'flip')
+    function_set=(
+        'add', 'sub', 'mul', 'div',  # Basic arithmetic
+        'sqrt', 'log', 'inv',        # Additional math functions
+        'and', 'or', 'not',         # Boolean logic
+        is_neg, eq, flip_func, ite  # Our custom functions
+    )
 )
 
 est_gp.fit(X_train, y_train)
