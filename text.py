@@ -15,9 +15,23 @@ output_file = 'output_2023-06-05.csv'  # Replace with your actual file name
 input_df = pd.read_csv(input_file, index_col=0)
 output_df = pd.read_csv(output_file, index_col=0)
 
+# Extract column names directly from the DataFrames
+input_cols = input_df.columns
+output_cols = output_df.columns
+
+print("Input columns:", input_cols)
+print("Output columns:", output_cols)
+
 # Identify numerical and categorical columns
 numerical_cols = input_df.select_dtypes(include=[np.number]).columns
 categorical_cols = input_df.select_dtypes(include=[object]).columns
+
+# Determine numerical and categorical output columns
+output_numerical_cols = output_df.select_dtypes(include=[np.number]).columns
+output_categorical_cols = output_df.select_dtypes(include=[object]).columns
+
+print("Numerical output columns:", output_numerical_cols)
+print("Categorical output columns:", output_categorical_cols)
 
 # Initialize label encoders for each categorical column
 label_encoders = {}
@@ -25,10 +39,16 @@ for col in categorical_cols:
     label_encoders[col] = LabelEncoder()
     input_df[col] = label_encoders[col].fit_transform(input_df[col])
 
+# Initialize label encoders for output categorical columns
+output_label_encoders = {}
+for col in output_categorical_cols:
+    output_label_encoders[col] = LabelEncoder()
+    output_df[col] = output_label_encoders[col].fit_transform(output_df[col])
+
 # Split the data into features (X) and targets (y)
 X = input_df
-y_numerical = output_df.select_dtypes(include=[np.number])
-y_categorical = output_df.select_dtypes(include=[object])
+y_numerical = output_df[output_numerical_cols]
+y_categorical = output_df[output_categorical_cols]
 
 # Split into training and testing sets
 X_train, X_test, y_train_num, y_test_num, y_train_cat, y_test_cat = train_test_split(
@@ -74,12 +94,12 @@ y_pred_cat = clf_pipeline.predict(X_test)
 
 # Convert predicted categories back to original labels
 y_pred_cat_original = y_pred_cat.copy()
-for i, col in enumerate(y_categorical.columns):
-    y_pred_cat_original[:, i] = label_encoders[col].inverse_transform(y_pred_cat[:, i])
+for i, col in enumerate(output_categorical_cols):
+    y_pred_cat_original[:, i] = output_label_encoders[col].inverse_transform(y_pred_cat[:, i])
 
 # Create DataFrames for predicted values
-y_pred_num_df = pd.DataFrame(y_pred_num, columns=y_numerical.columns, index=y_test_num.index)
-y_pred_cat_df = pd.DataFrame(y_pred_cat_original, columns=y_categorical.columns, index=y_test_cat.index)
+y_pred_num_df = pd.DataFrame(y_pred_num, columns=output_numerical_cols, index=y_test_num.index)
+y_pred_cat_df = pd.DataFrame(y_pred_cat_original, columns=output_categorical_cols, index=y_test_cat.index)
 
 # Combine numerical and categorical predictions
 y_pred_df = pd.concat([y_pred_num_df, y_pred_cat_df], axis=1)
@@ -94,15 +114,15 @@ def predict_new_entries(new_data):
         new_data = pd.DataFrame.from_dict(new_data, orient='index')
     
     # Ensure all columns are present and in the correct order
-    missing_cols = set(X.columns) - set(new_data.columns)
+    missing_cols = set(input_cols) - set(new_data.columns)
     for col in missing_cols:
         new_data[col] = 0  # or any appropriate default value
 
-    new_data = new_data[X.columns]
+    new_data = new_data[input_cols]
     
     # Encode categorical columns
     for col in categorical_cols:
-        new_data[col] = label_encoders[col].transform(new_data[col])
+        new_data[col] = label_encoders[col].transform(new_data[col].astype(str))
     
     # Make predictions
     new_pred_num = reg_pipeline.predict(new_data)
@@ -110,12 +130,12 @@ def predict_new_entries(new_data):
     
     # Convert predicted categories back to original labels
     new_pred_cat_original = new_pred_cat.copy()
-    for i, col in enumerate(y_categorical.columns):
-        new_pred_cat_original[:, i] = label_encoders[col].inverse_transform(new_pred_cat[:, i])
+    for i, col in enumerate(output_categorical_cols):
+        new_pred_cat_original[:, i] = output_label_encoders[col].inverse_transform(new_pred_cat[:, i])
     
     # Create DataFrames for predicted values
-    new_pred_num_df = pd.DataFrame(new_pred_num, columns=y_numerical.columns, index=new_data.index)
-    new_pred_cat_df = pd.DataFrame(new_pred_cat_original, columns=y_categorical.columns, index=new_data.index)
+    new_pred_num_df = pd.DataFrame(new_pred_num, columns=output_numerical_cols, index=new_data.index)
+    new_pred_cat_df = pd.DataFrame(new_pred_cat_original, columns=output_categorical_cols, index=new_data.index)
     
     # Combine numerical and categorical predictions
     new_pred_df = pd.concat([new_pred_num_df, new_pred_cat_df], axis=1)
@@ -129,5 +149,5 @@ new_entries = {
 }
 
 new_predictions = predict_new_entries(new_entries)
-print("Predictions for new entries:")
+print("\nPredictions for new entries:")
 print(new_predictions)
