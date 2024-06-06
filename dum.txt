@@ -1,8 +1,11 @@
 import streamlit as st
+import numpy as np
 import pandas as pd
 import plotly.express as px
+from sklearn.decomposition import PCA
 
 # Generate some example data
+np.random.seed(42)
 data = {
     'Price': np.random.uniform(1, 10, 100),
     'Factor': np.random.uniform(1, 10, 100),
@@ -14,12 +17,27 @@ data = {
 df = pd.DataFrame(data)
 df['Principal'] = df['Price'] * df['Factor'] * df['Qty'] * df['Other1'] * df['Other2']
 
-# Create a parallel coordinates plot
-fig = px.parallel_coordinates(df, color='Principal', 
-                              dimensions=['Price', 'Factor', 'Qty', 'Other1', 'Other2', 'Principal'],
-                              color_continuous_scale=px.colors.diverging.Tealrose, 
-                              color_continuous_midpoint=df['Principal'].mean())
+# Normalize the data before applying PCA
+df_normalized = (df - df.mean()) / df.std()
+
+# Apply PCA to reduce dimensionality to 2 components
+pca = PCA(n_components=2)
+components = pca.fit_transform(df_normalized)
+
+# Create a DataFrame with PCA components
+pca_df = pd.DataFrame(data=components, columns=['PCA1', 'PCA2'])
+pca_df['Principal'] = df['Principal']
+
+# Create a scatter plot of the PCA components
+fig = px.scatter(pca_df, x='PCA1', y='PCA2', color='Principal',
+                 color_continuous_scale=px.colors.diverging.Tealrose, 
+                 title='PCA of Principal Components')
 
 # Streamlit app layout
-st.title('Correlation of Principal with Multiple Factors')
+st.title('PCA Visualization of Principal with Multiple Factors')
 st.plotly_chart(fig, use_container_width=True)
+
+# Show explained variance
+explained_variance = pca.explained_variance_ratio_
+st.write(f'Explained variance by PCA1: {explained_variance[0]:.2f}')
+st.write(f'Explained variance by PCA2: {explained_variance[1]:.2f}')
